@@ -1,8 +1,8 @@
-Usage:
+# Setup
 
+- Get your key and secret here: https://fusionbrain.ai/keys/
 - Set your API key and secret in `config.ini`
-- Write your prompts to `input.txt` line by line
-- Run `python kanbagen.py`
+- Run `pip install -r requirements.txt`
 
 `config.ini` example:
 ```
@@ -11,4 +11,7 @@ key = keywithoutquotes
 secret = secretwithoutquotes
 ```
 
-Get your key and secret here: https://fusionbrain.ai/keys/
+# Usage
+
+- Write your prompts to `input.txt` line by line
+- Run `python kanbagen.py`
