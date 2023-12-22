@@ -103,5 +103,7 @@ if __name__ == '__main__':
             fh.write(base64.decodebytes(img_data))
         print(f'Saved result as {file_path}')
 
+        num = num + 1
+
     print(f'Generation complete!')
 
