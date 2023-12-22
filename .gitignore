@@ -1,3 +1,4 @@
 config.ini
-image_*.jpg
+*.jpg
+*/*.jpg
 .DS_Store
