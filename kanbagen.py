@@ -41,14 +41,16 @@ class Text2ImageAPI:
         return data['uuid']
 
     def check_generation(self, request_id, attempts=10, delay=10):
+        last_data = "{}"
         while attempts > 0:
             response = requests.get(self.URL + 'key/api/v1/text2image/status/' + request_id, headers=self.AUTH_HEADERS)
             data = response.json()
             if data['status'] == 'DONE':
                 return data['images']
-
+            last_data = data
             attempts -= 1
             time.sleep(delay)
+        print(f"Failed! Last data: {last_data}")
 
 
 if __name__ == '__main__':
@@ -76,7 +78,7 @@ if __name__ == '__main__':
     print(f'Using model: {model_id}')
 
     file = open('input.txt', 'r')
-    prompts = file.readlines()
+    prompts = file.read().splitlines()
 
     num = 1
 
@@ -92,7 +94,7 @@ if __name__ == '__main__':
             filename_prefix = f"{num:03d}"
 
         if args.pprefix:
-            clean_string = filter(lambda x: x.isalnum() or x.isspace(), prompt)
+            clean_string = filter(lambda x: x.isalnum() or x.isspace(), prompt_with_suffix)
             filename_prefix = filename_prefix + "_" + "".join(clean_string).replace(" ", "_")
         
         filename = f"{filename_prefix}_{uuid}.jpg"
