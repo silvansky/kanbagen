@@ -83,10 +83,10 @@ class Text2ImageAPI:
 
             attempt += 1
 
-            print(f"\r⏳ Waiting for generation to complete, attempt {attempt}/{attempts}, last data: {last_data}", end='', flush=True)
+            print(f"\r⏳ Waiting for {delay} seconds for generation to complete, attempt {attempt}/{attempts}, last data: {last_data}", end='', flush=True)
             time.sleep(delay)
 
-        raise Exception(f"Failed! Last data: {last_data}")
+        raise Exception(f"Failed! Last server response: {last_data}")
 
 
 if __name__ == '__main__':
@@ -150,9 +150,9 @@ if __name__ == '__main__':
             with open(file_path, "wb") as fh:
                 fh.write(base64.decodebytes(img_data))
 
-            print(f'✅ Saved result as {file_path}')
+            print(f'\n✅ Saved result as {file_path}')
         except Exception as e:
-            print(f"❌ Generation failed for prompt: {prompt_with_suffix} - {e}")
+            print(f"\n❌ Generation failed for prompt: {prompt_with_suffix} - {e}")
             continue
 
         num += 1
