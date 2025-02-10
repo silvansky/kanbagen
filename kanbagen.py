@@ -15,6 +15,11 @@ class Text2ImageAPI:
             'X-Secret': f'Secret {secret_key}',
         }
 
+    def check_availability(self, model):
+        response = requests.get(self.URL + 'key/api/v1/text2image/availability?model_id=' + str(model), headers=self.AUTH_HEADERS)
+        data = response.json()
+        print(f'🔍 Availability: {data}')
+
     def get_model(self):
         response = requests.get(self.URL + 'key/api/v1/models', headers=self.AUTH_HEADERS)
         data = response.json()
@@ -40,17 +45,48 @@ class Text2ImageAPI:
         data = response.json()
         return data['uuid']
 
-    def check_generation(self, request_id, attempts=10, delay=10):
+    def check_generation(self, request_id, attempts=60, delay=20):
         last_data = "{}"
-        while attempts > 0:
-            response = requests.get(self.URL + 'key/api/v1/text2image/status/' + request_id, headers=self.AUTH_HEADERS)
-            data = response.json()
-            if data['status'] == 'DONE':
-                return data['images']
-            last_data = data
-            attempts -= 1
+        attempt = 0
+
+        while attempt <= attempts:
+            try:
+                response = requests.get(self.URL + 'key/api/v1/text2image/status/' + request_id, headers=self.AUTH_HEADERS)
+                data = response.json()
+                httpStatus = response.status_code
+
+                if httpStatus != 200:
+                    raise Exception(f"Bad HTTP status code: {httpStatus}, data: {data}")
+
+                status = data['status']
+
+                if status == 'DONE':
+                    if data['censored'] == True:
+                        raise Exception(f"Generation censored: {data['errorDescription']}")
+
+                    print(f"\nStatus: {status}, censored: {data['censored']}, error: {data['errorDescription']}")
+
+                    images = data['images']
+
+                    # check images is array and contains at least 1 element
+                    if not isinstance(images, list) or len(images) < 1:
+                        raise Exception(f"Unexpected response from server")
+
+                    img_data = bytes(images[0], "utf-8")
+                    return img_data
+                elif status == 'FAIL':
+                    raise Exception(f"Generation failed: {data['errorDescription']}")
+
+                last_data = data
+            except Exception as e:
+                print(f"\n❌ Network error: {e}")
+
+            attempt += 1
+
+            print(f"\r⏳ Waiting for generation to complete, attempt {attempt}/{attempts}, last data: {last_data}", end='', flush=True)
             time.sleep(delay)
-        print(f"Failed! Last data: {last_data}")
+
+        raise Exception(f"Failed! Last data: {last_data}")
 
 
 if __name__ == '__main__':
@@ -64,48 +100,62 @@ if __name__ == '__main__':
     argParser.add_argument("-o", "--output", type=str, default="output", help="Output directory")
     argParser.add_argument("-n", "--nprefix", action='store_true', help="Add numeric prefix to images")
     argParser.add_argument("-p", "--pprefix", action='store_true', help="Add prompt prefix to images")
+    argParser.add_argument("--style", type=str, default="", help="Specify style")
     args = argParser.parse_args()
 
     print(f'Starting with arguments: {args}')
 
     print(f'API key: {api_key}, secret: <hidden>')
 
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
+    try:
+        if not os.path.exists(args.output):
+            os.makedirs(args.output)
 
-    api = Text2ImageAPI('https://api-key.fusionbrain.ai/', api_key, api_secret)
-    model_id = api.get_model()
-    print(f'Using model: {model_id}')
+        api = Text2ImageAPI('https://api-key.fusionbrain.ai/', api_key, api_secret)
+        model_id = api.get_model()
+        print(f'Using model: {model_id}')
+        api.check_availability(model_id)
 
-    file = open('input.txt', 'r')
-    prompts = file.read().splitlines()
+        file = open('input.txt', 'r')
+        prompts = file.read().splitlines()
+    except Exception as e:
+        print(f"❌ Fatal Error: {e}")
+        exit(1)
 
     num = 1
+    num_prompts = len(prompts)
 
     for prompt in prompts:
         prompt_with_suffix = prompt + " " + args.suffix
-        print(f'Generating with prompt: {prompt_with_suffix}')
-        uuid = api.generate(prompt_with_suffix, model_id)
-        images = api.check_generation(uuid)
-        img_data = bytes(images[0], "utf-8")
-        filename_prefix = "image"
 
-        if args.nprefix:
-            filename_prefix = f"{num:03d}"
+        print(f'Generating with prompt {num}/{num_prompts}: {prompt_with_suffix}')
 
-        if args.pprefix:
-            clean_string = filter(lambda x: x.isalnum() or x.isspace(), prompt_with_suffix)
-            filename_prefix = filename_prefix + "_" + "".join(clean_string).replace(" ", "_")
-        
-        filename = f"{filename_prefix}_{uuid}.jpg"
+        try:
+            uuid = api.generate(prompt_with_suffix, model_id)
+            img_data = api.check_generation(uuid)
 
-        file_path = os.path.join(args.output, filename)  
+            filename_prefix = "image"
 
-        with open(file_path, "wb") as fh:
-            fh.write(base64.decodebytes(img_data))
-        print(f'Saved result as {file_path}')
+            if args.nprefix:
+                filename_prefix = f"{num:03d}"
 
-        num = num + 1
+            if args.pprefix:
+                clean_string = filter(lambda x: x.isalnum() or x.isspace(), prompt_with_suffix)
+                filename_prefix = filename_prefix + "_" + "".join(clean_string).replace(" ", "_")
+
+            filename = f"{filename_prefix}_{uuid}.jpg"
+
+            file_path = os.path.join(args.output, filename)
+
+            with open(file_path, "wb") as fh:
+                fh.write(base64.decodebytes(img_data))
+
+            print(f'✅ Saved result as {file_path}')
+        except Exception as e:
+            print(f"❌ Generation failed for prompt: {prompt_with_suffix} - {e}")
+            continue
+
+        num += 1
 
     print(f'Generation complete!')
 
