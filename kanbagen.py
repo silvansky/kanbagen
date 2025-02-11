@@ -5,6 +5,7 @@ import base64
 import configparser
 import argparse
 import os
+from colorama import Fore, Back, Style
 
 class Text2ImageAPIError(Exception):
     def __init__(self, message):
@@ -84,10 +85,9 @@ class Text2ImageAPI:
 
                 last_data = data
             except Text2ImageAPIError as e:
-                print(f"\n❌ API error: {e}")
                 raise
             except Exception as e:
-                print(f"\n❌ Network error: {e}")
+                print(f"\n❌ Network error: " + Fore.RED + f"{e}" + Style.RESET_ALL)
 
             attempt += 1
 
@@ -127,16 +127,18 @@ if __name__ == '__main__':
         file = open('input.txt', 'r')
         prompts = file.read().splitlines()
     except Exception as e:
-        print(f"❌ Fatal Error: {e}")
+        print(f"❌ Fatal Error: " + Fore.RED + f"{e}" + Style.RESET_ALL)
         exit(1)
 
-    num = 1
+    num = 0
     num_prompts = len(prompts)
+    successfull_generations = 0
 
     for prompt in prompts:
+        num += 1
         prompt_with_suffix = prompt + " " + args.suffix
 
-        print(f'Generating with prompt {num}/{num_prompts}: {prompt_with_suffix}')
+        print(f'Generating with prompt ' + Fore.GREEN + f'{num}/{num_prompts}' + Style.RESET_ALL + f': {prompt_with_suffix}')
 
         try:
             uuid = api.generate(prompt_with_suffix, model_id)
@@ -159,11 +161,13 @@ if __name__ == '__main__':
                 fh.write(base64.decodebytes(img_data))
 
             print(f'\n✅ Saved result as {file_path}')
+            successfull_generations += 1
+        except KeyboardInterrupt:
+            print(f"\n❌ Generation aborted by user")
+            break
         except Exception as e:
-            print(f"\n❌ Generation failed for prompt: {prompt_with_suffix} - {e}")
+            print(f"\n❌ Generation failed for prompt: {prompt_with_suffix} - " + Fore.RED + f"{e}" + Style.RESET_ALL)
             continue
 
-        num += 1
-
-    print(f'Generation complete!')
+    print(f'Generation complete for ' + Fore.GREEN + f'{successfull_generations}/{num_prompts}' + Style.RESET_ALL + ' prompts!')
 
