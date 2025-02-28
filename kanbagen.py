@@ -108,6 +108,7 @@ if __name__ == '__main__':
     argParser.add_argument("-o", "--output", type=str, default="output", help="Output directory")
     argParser.add_argument("-n", "--nprefix", action='store_true', help="Add numeric prefix to images")
     argParser.add_argument("-p", "--pprefix", action='store_true', help="Add prompt prefix to images")
+    argParser.add_argument("-r", "--repeat", type=int, default=1, help="Repeat all generations X times. Must be greater than 0")
     argParser.add_argument("--style", type=str, default="", help="Specify style")
     args = argParser.parse_args()
 
@@ -129,6 +130,12 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"❌ Fatal Error: " + Fore.RED + f"{e}" + Style.RESET_ALL)
         exit(1)
+
+    if args.repeat < 1:
+        print(f"❌ Fatal Error: Repeat count must be greater than 0")
+        exit(1)
+
+    prompts = prompts * args.repeat
 
     num = 0
     num_prompts = len(prompts)
