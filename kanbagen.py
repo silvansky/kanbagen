@@ -21,79 +21,104 @@ class Text2ImageAPI:
         }
 
     def check_availability(self, model):
-        response = requests.get(self.URL + 'key/api/v1/text2image/availability?model_id=' + str(model), headers=self.AUTH_HEADERS)
+        print(f'🔍 Checking availability for model {model}...')
+        response = requests.get(self.URL + 'key/api/v1/pipeline/' + str(model) + '/availability', headers=self.AUTH_HEADERS)
         data = response.json()
-        print(f'🔍 Availability: {data}')
-        status = data['status']
+        print(f'🔍 Response: {data}')
+        
+        # Try pipeline_status first, fall back to status
+        status = data.get('pipeline_status', data.get('status'))
+        if not status:
+            print(f'❌ No status field found in response: {data}')
+            raise Text2ImageAPIError(f"Invalid response format: no status field")
+        
         if status != 'ACTIVE':
+            print(f'❌ Model not available, status: {status}')
             raise Text2ImageAPIError(f"Model not available: {status}")
+        print(f'✅ Model is available')
 
     def get_model(self):
-        response = requests.get(self.URL + 'key/api/v1/models', headers=self.AUTH_HEADERS)
+        print(f'🔍 Getting available models...')
+        response = requests.get(self.URL + 'key/api/v1/pipelines', headers=self.AUTH_HEADERS)
+        print(f'🔍 Response: {response}')
         data = response.json()
-        print(f'Available models: {data}')
-        return data[0]['id']
+        print(f'📋 Available models: {data}')
+        model_id = data[0]['id']
+        print(f'✅ Selected model: {model_id}')
+        return model_id
 
     def generate(self, prompt, model, images=1, width=1024, height=1024):
+        print(f'🎨 Generating image...')
+        print(f'📝 Prompt: {prompt}')
+        print(f'🔧 Parameters: {images} images, {width}x{height}')
+        
         params = {
             "type": "GENERATE",
             "numImages": images,
             "width": width,
             "height": height,
             "generateParams": {
-                "query": f"{prompt}"
+                "query": prompt
             }
         }
+        print(f'📦 Request params: {params}')
 
         data = {
-            'model_id': (None, model),
+            'pipeline_id': (None, model),
             'params': (None, json.dumps(params), 'application/json')
         }
-        response = requests.post(self.URL + 'key/api/v1/text2image/run', headers=self.AUTH_HEADERS, files=data)
+        response = requests.post(self.URL + 'key/api/v1/pipeline/run', headers=self.AUTH_HEADERS, files=data)
         data = response.json()
-        return data['uuid']
+        uuid = data['uuid']
+        print(f'✅ Generation started, UUID: {uuid}')
+        return uuid
 
     def check_generation(self, request_id, attempts=60, delay=20):
+        print(f'🔍 Checking generation status for {request_id}...')
         last_data = "{}"
         attempt = 0
 
         while attempt <= attempts:
             try:
-                response = requests.get(self.URL + 'key/api/v1/text2image/status/' + request_id, headers=self.AUTH_HEADERS)
+                response = requests.get(self.URL + 'key/api/v1/pipeline/status/' + request_id, headers=self.AUTH_HEADERS)
                 data = response.json()
                 httpStatus = response.status_code
 
                 if httpStatus != 200:
+                    print(f'❌ Bad HTTP status: {httpStatus}')
                     raise Text2ImageAPIError(f"Bad HTTP status code: {httpStatus}, data: {data}")
 
                 status = data['status']
+                print(f'📊 Generation status: {status}')
 
                 if status == 'DONE':
-                    if data['censored'] == True:
+                    if data['result'].get('censored', False):
+                        print(f'🚫 Generation censored')
                         raise Text2ImageAPIError(f"Generation censored")
 
-                    images = data['images']
-
-                    # check images is array and contains at least 1 element
-                    if not isinstance(images, list) or len(images) < 1:
+                    files = data['result']['files']
+                    if not files or not isinstance(files, list):
+                        print(f'❌ Invalid response format')
                         raise Text2ImageAPIError(f"Unexpected response from server")
 
-                    img_data = bytes(images[0], "utf-8")
+                    img_data = files[0].encode('utf-8')
+                    print(f'✅ Generation complete')
                     return img_data
                 elif status == 'FAIL':
+                    print(f'❌ Generation failed')
                     raise Text2ImageAPIError(f"Generation failed: {data}")
 
                 last_data = data
-            except Text2ImageAPIError as e:
+            except Text2ImageAPIError:
                 raise
             except Exception as e:
                 print(f"\n❌ Network error: " + Fore.RED + f"{e}" + Style.RESET_ALL)
 
             attempt += 1
-
-            print(f"\r⏳ Waiting for {delay} seconds for generation to complete, attempt {attempt}/{attempts}", end='', flush=True)
+            print(f"\r⏳ Waiting for {delay} seconds, attempt {attempt}/{attempts}", end='', flush=True)
             time.sleep(delay)
 
+        print(f'❌ Generation timed out')
         raise Text2ImageAPIError(f"Failed! Last server response: {last_data}")
 
 
